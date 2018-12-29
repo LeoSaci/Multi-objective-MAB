@@ -9,7 +9,7 @@ from random_policy import random_policy
 from OGDE import OGDE
 
 D = 2
-K = 6
+K = 8
 ArmClass = ['multinomial','exponential'][0] #
 # Generate a D-objective MO-MAB, K arms of ArmClass distribution
 A,A_star = create_momab(ArmClass,K)
@@ -17,9 +17,9 @@ A,A_star = create_momab(ArmClass,K)
 q = stats.norm.ppf(0.975)
 
 
-T = 100000
-hist_times = [500,2000,50000,T]
-n_itr = 10
+T = 50000
+hist_times = [500,2000,10000,T]
+n_itr = 1
 
 delta = 0.1
 
@@ -44,7 +44,7 @@ ogde = OGDE(A, A_star, w0, delta)
 algo_names = ['Pareto','Linear scalarization '+r'$(W_1)$','Linear scalarization '+r'$(W_2)$','Linear scalarization '+r'$(W_3)$','Random policy','OGDE']
 algo_list = [pareto,scal,scal2,scal3,rand,ogde]
 
-for i in range(0,4):
+for i in range(0,6):
     algo = algo_names[i]
     algorithm = algo_list[i]
     print(A_star)
