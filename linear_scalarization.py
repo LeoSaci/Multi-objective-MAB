@@ -5,7 +5,7 @@ from utils import lin_scal
 
 
 class scal_UCB1(object):
-    def __init__(self, A, weights_sets, A_star = None):
+    def __init__(self, A, weights_sets, A_star):
         self.t = 0
         self.A = A
         self.A_star = A_star

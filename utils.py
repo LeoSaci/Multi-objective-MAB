@@ -3,8 +3,8 @@ import numpy.random as rd
 import matplotlib.pyplot as plt
 import mo_arms
 
-L = np.array([0.0001,1])
-arm = mo_arms.ArmExp(L)
+
+
 
 # Generate a bi-objective MO-MAB, K arms with multinomial distributions
 def create_momab(ArmClass,K):
@@ -36,6 +36,34 @@ def create_momab(ArmClass,K):
 def Pareto_metric(mu,ParetoSet):
     return np.max([np.min(nu-mu) for nu in ParetoSet])
 
+
+def plot_Pareto_frontier(algorithm):
+    O = algorithm.O
+    arms_regrets = algorithm.arms_regrets
+    virtual_rewards = [O[i]+arms_regrets[i] for i in range(len(O))]
+    tab = np.array([virtual_rewards[i][1]/virtual_rewards[i][0] for i in range(len(O))])
+    pente_max,pente_min = tab[np.argmax(tab)],tab[np.argmin(tab)]
+    angles = np.linspace(np.arctan(pente_min),np.arctan(pente_max),100)
+    O_star = algorithm.O_star
+    frontier_points = np.array([[np.cos(angles[i]),np.sin(angles[i])] for i in range(len(angles))])
+    for i in range(len(angles)):
+        eps = Pareto_metric(frontier_points[i],O_star)
+        frontier_points[i] += eps*np.ones(2)
+
+    frontier_points = frontier_points.T
+    plt.figure(0)
+    plt.plot(frontier_points[0],frontier_points[1], color = 'g', label = 'Pareto frontier')
+    plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'r', label = 'Suboptimal arms reward vectors')
+    for i in range(len(O)):
+        plt.annotate('Arm '+str(i+1),(O[i][0],O[i][1]),(O[i][0]+0.01,O[i][1]+0.01))
+        if i < len(O_star)-1:
+            plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k')
+        if i == len(O_star)-1:
+            plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k', label = 'Optimal arms reward vectors')
+    plt.legend()
+
+
+
 def lin_scal(weights,sample):
     n = len(weights)
     weights = weights.reshape((1,n))
@@ -64,42 +92,28 @@ def simplex_proj(eps,x):
 
 def plot_histograms(algo,histograms,hist_times,K):
     plt.figure(algo) # Empirical distributions of the selected arms at different times
-    plt.subplot(2,2,1)
+    plt.subplot(1,3,1)
     t = hist_times[0]
     histogram = histograms[0]
     plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
     plt.xlim([1,K])
     plt.ylim([0,1])
-    plt.xlabel('Arms')
     plt.ylabel('Probability')
     plt.title('t = '+str(t))
 
-    plt.subplot(2,2,2)
+    plt.subplot(1,3,2)
     t = hist_times[1]
     histogram = histograms[1]
     plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
     plt.xlim([1,K])
     plt.ylim([0,1])
     plt.xlabel('Arms')
-    plt.ylabel('Probability')
     plt.title('t = '+str(t))
 
-    plt.subplot(2,2,3)
+    plt.subplot(1,3,3)
     t = hist_times[2]
     histogram = histograms[2]
     plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
     plt.xlim([1,K])
     plt.ylim([0,1])
-    plt.xlabel('Arms')
-    plt.ylabel('Probability')
-    plt.title('t = '+str(t))
-
-    plt.subplot(2,2,4)
-    t = hist_times[3]
-    histogram = histograms[3]
-    plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
-    plt.xlim([1,K])
-    plt.ylim([0,1])
-    plt.xlabel('Arms')
-    plt.ylabel('Probability')
     plt.title('t = '+str(t))
