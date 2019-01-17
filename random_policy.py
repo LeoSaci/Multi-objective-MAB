@@ -4,37 +4,32 @@ import matplotlib.pyplot as plt
 from utils import Pareto_metric
 
 class random_policy(object):
-    def __init__(self, A, A_star):
+    def __init__(self, MO_MAB):
+        self.MO_MAB = MO_MAB
         self.t = 0
-        self.A = A
-        self.A_star = A_star
-        self.K = len(self.A)
-        self.O = np.array([arm.mean for arm in self.A])
-        self.O_star = np.array([self.O[i] for i in self.A_star])
-        self.D = len(self.O[0])
-        self.mean_rewards = np.zeros((self.K,self.D))
-        self.arms_counter = np.zeros(self.K)
-        self.arms_regrets = np.array([Pareto_metric(mu,self.O_star) for mu in self.O])
+        self.mean_rewards = np.zeros((MO_MAB.K,MO_MAB.D))
+        self.arms_counter = np.zeros(MO_MAB.K)
+        self.arms_regrets = np.array([Pareto_metric(mu,MO_MAB.O_star) for mu in MO_MAB.O])
 
     def initialize(self):
-        self.arms_counter = np.zeros(self.K)
-        for _ in range(self.K):
-            rand_ind = np.random.randint(self.K)
-            self.mean_rewards[rand_ind] = self.A[rand_ind].sample()
+        self.arms_counter = np.zeros(self.MO_MAB.K)
+        for _ in range(self.MO_MAB.K):
+            rand_ind = np.random.randint(self.MO_MAB.K)
+            self.mean_rewards[rand_ind] = self.MO_MAB.A[rand_ind].sample()
             self.arms_counter[rand_ind] += 1
-        self.t = self.K
+        self.t = self.MO_MAB.K
 
     def update(self):
-        i = np.random.randint(self.K)
+        i = np.random.randint(self.MO_MAB.K)
         self.mean_rewards[i] *= self.arms_counter[i]
-        self.mean_rewards[i] += self.A[i].sample()
+        self.mean_rewards[i] += self.MO_MAB.A[i].sample()
         self.arms_counter[i] += 1
         self.mean_rewards[i] /= self.arms_counter[i]
         self.t += 1
         return i
 
     def fairness(self):
-        A_star_counter = np.array([self.arms_counter[i] for i in self.A_star])
+        A_star_counter = np.array([self.arms_counter[i] for i in self.MO_MAB.A_star])
         return A_star_counter.var()
 
     def regret(self):

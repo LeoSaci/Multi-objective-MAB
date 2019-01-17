@@ -1,18 +1,28 @@
 import numpy as np
 import numpy.random as rd
 import matplotlib.pyplot as plt
+import pylab
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import proj3d
 import mo_arms
 
 
 
 
 # Generate a bi-objective MO-MAB, K arms with multinomial distributions
-def create_momab(ArmClass,K):
-    angles = [rd.rand()*np.pi/2 for i in range(K)]
-    if ArmClass == 'multinomial':
-        A = [mo_arms.ArmMultinomial(mean = rd.rand()*np.array([np.cos(angles[i]),np.sin(angles[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
-    else:
-        A = [mo_arms.ArmExp(L = rd.rand()*np.array([np.cos(angles[i]),np.sin(angles[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
+def create_arms(ArmClass,K,D):
+    angles1 = [rd.rand()*np.pi/2 for i in range(K)]
+    angles2 = [rd.rand()*np.pi/2 for i in range(K)]
+    if D == 2:
+        if ArmClass == 'multinomial':
+            A = [mo_arms.ArmMultinomial(mean = rd.rand()*np.array([np.cos(angles1[i]),np.sin(angles1[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
+        else:
+            A = [mo_arms.ArmExp(L = rd.rand()*np.array([np.cos(angles1[i]),np.sin(angles1[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
+    elif D == 3:
+        if ArmClass == 'multinomial':
+            A = [mo_arms.ArmMultinomial(mean = rd.rand()*np.array([np.cos(angles1[i])*np.sin(angles2[i]),np.sin(angles1[i])*np.sin(angles2[i]),np.cos(angles2[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
+        else:
+            A = [mo_arms.ArmExp(L = rd.rand()*np.array([np.cos(angles1[i])*np.sin(angles2[i]),np.sin(angles1[i])*np.sin(angles2[i]),np.cos(angles2[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
     A_star = []
     for k in range(K):
         mu = A[k].mean
@@ -36,23 +46,31 @@ def create_momab(ArmClass,K):
 def Pareto_metric(mu,ParetoSet):
     return np.max([np.min(nu-mu) for nu in ParetoSet])
 
+def optimal_mixed_sol(arm_means):
+    top_arms = []
+    bottom_arms = []
+    for i in range(len(arm_means)):
+        if arm_means[i][0]-arm_means[i][1]<0:
+            top_arms.append(i)
+        else:
+            bottom_arms.append(i)
+    if top_arms == [] or bottom_arms == []:
+        print('error')
+    else:
+        l = []
+        for i in range(len(top_arms)):
+            for j in range(len(bottom_arms)):
+                P = arm_means[top_arms[i]]
+                Q = arm_means[bottom_arms[j]]
+                l.append((P[0]*((Q[1]-P[1])/(Q[0]-P[0]))-P[1])/((Q[1]-P[1])/(Q[0]-P[0])-1))
+    max_value = np.max(l)
+    return np.array([max_value,max_value])
 
-def plot_Pareto_frontier(algorithm):
-    O = algorithm.O
-    arms_regrets = algorithm.arms_regrets
-    virtual_rewards = [O[i]+arms_regrets[i] for i in range(len(O))]
-    tab = np.array([virtual_rewards[i][1]/virtual_rewards[i][0] for i in range(len(O))])
-    pente_max,pente_min = tab[np.argmax(tab)],tab[np.argmin(tab)]
-    angles = np.linspace(np.arctan(pente_min),np.arctan(pente_max),100)
-    O_star = algorithm.O_star
-    frontier_points = np.array([[np.cos(angles[i]),np.sin(angles[i])] for i in range(len(angles))])
-    for i in range(len(angles)):
-        eps = Pareto_metric(frontier_points[i],O_star)
-        frontier_points[i] += eps*np.ones(2)
 
-    frontier_points = frontier_points.T
-    plt.figure(0)
-    plt.plot(frontier_points[0],frontier_points[1], color = 'g', label = 'Pareto frontier')
+def plot_Pareto_frontier2d(MO_MAB,ogde_list = []):
+    O = MO_MAB.O
+    O_star = MO_MAB.O_star
+    fig = plt.figure(0)
     plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'r', label = 'Suboptimal arms reward vectors')
     for i in range(len(O)):
         plt.annotate('Arm '+str(i+1),(O[i][0],O[i][1]),(O[i][0]+0.01,O[i][1]+0.01))
@@ -60,6 +78,83 @@ def plot_Pareto_frontier(algorithm):
             plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k')
         if i == len(O_star)-1:
             plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k', label = 'Optimal arms reward vectors')
+    opt_mixed_sol = optimal_mixed_sol(O)
+    plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = 'Optimal mixed solution for $G_w$')
+    if ogde_list != []:
+        for i,algo in enumerate(ogde_list):
+            w = algo.w
+            alpha = algo.alpha.reshape((len(algo.alpha),1))
+            mu = O.T
+            point = mu.dot(alpha).T[0]
+            print(point)
+            plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\mu\\alpha_T$ '+'for w = '+'('+str(w[0,0])+','+str(w[0,1])+') and $\delta$ = '+str(algo.delta))
+            plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
+    plt.legend()
+
+def plot_Pareto_frontier3d(MO_MAB,opt_mix):
+    O = MO_MAB.O
+    O_star = MO_MAB.O_star
+
+    fig = pylab.figure(0)
+    ax = fig.add_subplot(111, projection = '3d')
+    x = O[:,0]
+    y = O[:,1]
+    z = O[:,2]
+    sc1 = ax.scatter(x,y,z,color = 'k',label = 'Suboptimal arms reward vectors')
+
+    x = O_star[:,0]
+    y = O_star[:,1]
+    z = O_star[:,2]
+    sc2 = ax.scatter(x,y,z,color = 'r',label = 'Optimal arms reward vectors')
+
+    ax.scatter(opt_mix[0],opt_mix[1],opt_mix[2], marker = 'o', color = 'g', label = 'Computed optimal mixed solution')
+
+    for i in range(len(O)):
+        if i < len(O_star):
+            col = 'r'
+        else:
+            col = 'k'
+        ax.text(O[i][0],O[i][1],O[i][2], ' Arm'+ '%s' % (str(i+1)), size=10, zorder=1,  color=col)
+
+    # theta = np.linspace(0,np.pi/2,50)
+    # phi = np.linspace(0,np.pi/2,50)
+    # tab = np.array([     [ 0.1*np.cos(theta[i])*np.sin(phi[i]),0.1*np.sin(theta[i])*np.sin(phi[i]),0.1*np.cos(phi[i]) ] for i in range(50)     ])
+    # tab1 = np.zeros((len(tab),3))
+    # tab2 = np.zeros((len(tab),3))
+    # for i in range(len(tab)):
+    #     tab1[i] = tab[i] + np.max([np.min(mu-tab[i]) for mu in O_star])
+    #     tab2[i] = tab[i] + np.min([np.max(mu-tab[i]) for mu in O_star])
+    # x = tab1.T[0]
+    # y = tab1.T[1]
+    # X,Y = np.meshgrid(x, y)
+    # Z = np.array([ []     ])
+    #
+    #
+    # ax.imshow(Z,cmap=cm.RdBu)
+
+
+    # opt_mixed_sol = optimal_mixed_sol(O)
+    # plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = 'Optimal mixed solution for $G_w$')
+
+
+
+    # plt.figure(0)
+    # plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'k', label = 'Suboptimal arms reward vectors')
+    # for i in range(len(O)):
+    #     plt.annotate('Arm '+str(i+1),(O[i][0],O[i][1]),(O[i][0]+0.01,O[i][1]+0.01))
+    #     if i < len(O_star):
+    #         plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='r')
+
+
+    # if ogde_list != []:
+    #     for i,algo in enumerate(ogde_list):
+    #         w = algo.w
+    #         alpha = algo.alpha.reshape((len(algo.alpha),1))
+    #         mu = O.T
+    #         point = mu.dot(alpha).T[0]
+    #         print(point)
+    #         plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\mu\\alpha_T$ '+'for w = '+'('+str(w[0,0])+','+str(w[0,1])+') and $\delta$ = '+str(algo.delta))
+    #         plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
     plt.legend()
 
 
@@ -70,50 +165,99 @@ def lin_scal(weights,sample):
     sample = sample.reshape((n,1))
     return weights.dot(sample)[0,0]
 
-def reordonate(mu):
-    mu_prime = np.copy(mu.reshape(len(mu)))
-    mu_prime.sort()
-    mu_prime.reverse()
-    return mu_prime
+# return the permutation sorting the components of mat.dot(x) in a decreasing order
+def decreasing_order(mat,x):
+    x = np.array(x).reshape((len(x),1))
+    y = mat.dot(x)
+    min_val = np.min(y)
+    mat_prim = np.zeros(mat.shape)
+    l = []
+    for i in range(len(mat)):
+        k = np.argmax(y)
+        y[k] = min_val - 1
+        l.append(k)
+    return np.array(l)
+
+# reordonate the rows of the matrix x wrt the permutation sigma
+def reordonate(sigma,x):
+    return np.array([x[i] for i in sigma])
+
+# Projection on the probability simplex
+def projsplx(x):
+    x = np.array(x)
+    x = x.reshape(len(x))
+    n = len(x)
+    y = np.copy(x)
+    y.sort()
+    i = n-1
+    t_i = (np.sum(y[i:])-1)/(n-i)
+    t_hat = t_i + 1
+    while t_hat != t_i and i > 0:
+        t_i = (np.sum(y[i:])-1)/(n-i)
+        if t_i >= y[i-1]:
+            t_hat = t_i
+        else:
+            i -= 1
+            t_hat = t_i + 1
+    if i == 0:
+        t_hat = (np.sum(x)-1)/n
+    return np.array([np.max((x[i]-t_hat,0)) for i in range(n)])
+
 
 def simplex_proj(eps,x):
-    y = x.reshape(len(x))
+    x = np.array(x)
+    x = x.reshape(len(x))
     n = len(x)
-    y = 1/(1-eps*n)*(y-eps*np.ones(n))
-    y_sorted = list(np.copy(y))
-    y_sorted.sort()
-    y_sorted.reverse()
-    y_sorted = np.array(y_sorted)
-    rho = np.max([j for j in range(1,n+1) if y_sorted[j-1]+(1/j)*(1-np.sum(y_sorted[:j]))])
-    lambd = (1/rho)*(1-sum(y_sorted[:rho]))
-    gamma = np.array([np.max([x[i]+lambd,0]) for i in range(n)])
+    y = (x-eps*np.ones(n))/(1-eps*n)
+    gamma = projsplx(y)
     alpha = eps*np.ones(n) + (1-eps*n)*gamma
     return alpha
 
-def plot_histograms(algo,histograms,hist_times,K):
-    plt.figure(algo) # Empirical distributions of the selected arms at different times
-    plt.subplot(1,3,1)
+# Plot the empirical distributions of arm selection at different times
+def plot_histograms(algo,histograms,hist_times,K,A_star):
+    fig, (ax1, ax2,ax3) = plt.subplots(1,3)
     t = hist_times[0]
     histogram = histograms[0]
-    plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
-    plt.xlim([1,K])
-    plt.ylim([0,1])
-    plt.ylabel('Probability')
-    plt.title('t = '+str(t))
+    N,bins,patches1 = ax1.hist(histogram,bins=K,range = (1,K+1),density=True,edgecolor='white',align = 'mid',color = "#777777")
+    ax1.set_ylim([-0.06,1])
+    for i,(bin_size, bin, patch) in enumerate(zip(N, bins, patches1)):
+        if i < len(A_star):
+            patch.set_facecolor("#FF0000")
+    for i in range(1,K+1):
+        ax1.text((2*i+1)/2,-0.05,str(i),size=5,withdash=True)
+    ax1.set_xticks([])
+    ax1.set_xlabel('Arm number')
+    ax1.set_ylabel('Probability')
+    ax1.set_title('t = '+str(t))
 
-    plt.subplot(1,3,2)
+
     t = hist_times[1]
     histogram = histograms[1]
-    plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
-    plt.xlim([1,K])
-    plt.ylim([0,1])
-    plt.xlabel('Arms')
-    plt.title('t = '+str(t))
+    N,bins,patches2 = ax2.hist(histogram,bins=K,range = (1,K+1),density=True,edgecolor='white',align = 'mid',color = "#777777")
+    ax2.set_ylim([-0.06,1])
+    for i,(bin_size, bin, patch) in enumerate(zip(N, bins, patches2)):
+        if i < len(A_star):
+            patch.set_facecolor("#FF0000")
+    for i in range(1,K+1):
+        ax2.text((2*i+1)/2,-0.05,str(i),size=5)
+    ax2.set_xticks([])
+    ax2.set_xlabel('Arm number')
+    ax2.set_ylabel('Probability')
+    ax2.set_title('t = '+str(t))
 
-    plt.subplot(1,3,3)
     t = hist_times[2]
     histogram = histograms[2]
-    plt.hist(histogram,4*K, range = (0,K), weights = [1/len(histogram) for i in range(len(histogram))])
-    plt.xlim([1,K])
-    plt.ylim([0,1])
-    plt.title('t = '+str(t))
+    N,bins,patches3 = ax3.hist(histogram,bins=K,range = (1,K+1),density=True,edgecolor='white',align = 'mid',color = "#777777")
+    ax3.set_ylim([-0.06,1])
+    for i,(bin_size, bin, patch) in enumerate(zip(N, bins, patches3)):
+        if i < len(A_star):
+            patch.set_facecolor("#FF0000")
+    for i in range(1,K+1):
+        ax3.text((2*i+1)/2,-0.05,str(i),size=5)
+    ax3.set_xticks([])
+    ax3.set_xlabel('Arm number')
+    ax3.set_ylabel('Probability')
+    ax3.set_title('t = '+str(t))
+
+    fig.suptitle(algo)
+    return fig

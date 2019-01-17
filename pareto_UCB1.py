@@ -5,43 +5,39 @@ from utils import Pareto_metric
 
 
 
-class UCB1Pareto(object):
-    def __init__(self, A, A_star):
+
+class UCB1Pareto():
+    def __init__(self, MoMAB):
+        self.MoMAB = MoMAB
         self.t = 0
-        self.A = A
-        self.A_star = A_star
-        self.K = len(self.A)
-        self.O = np.array([arm.mean for arm in self.A])
-        self.O_star = np.array([self.O[i] for i in self.A_star])
-        self.D = len(self.O[0])
-        self.mean_rewards = np.zeros((self.K,self.D))
-        self.arms_counter = np.zeros(self.K)
-        self.arms_regrets = np.array([Pareto_metric(mu,self.O_star) for mu in self.O])
+        self.mean_rewards = np.zeros((MoMAB.K,MoMAB.D))
+        self.arms_counter = np.zeros(MoMAB.K)
+        self.arms_regrets = np.array([Pareto_metric(mu,MoMAB.O_star) for mu in MoMAB.O])
 
     def initialize(self):
-        self.arms_counter = np.ones(self.K)
-        for i in range(self.K):
-            self.mean_rewards[i] = self.A[i].sample()
-        self.t = self.K
+        self.arms_counter = np.ones(self.MoMAB.K)
+        for i in range(self.MoMAB.K):
+            self.mean_rewards[i] = self.MoMAB.A[i].sample()
+        self.t = self.MoMAB.K
 
     def update(self):
         Pareto_Set = []
-        mu = [self.mean_rewards[k]+np.sqrt((2/self.arms_counter[k])*np.log( self.t*(self.D*self.K)**0.25)) for k in range(self.K)]
+        mu = [self.mean_rewards[k]+np.sqrt((2/self.arms_counter[k])*np.log( self.t*(self.MoMAB.D*self.MoMAB.K)**0.25)) for k in range(self.MoMAB.K)]
 
-        for i in range(self.K):
+        for i in range(self.MoMAB.K):
             optimal = True
             l = 0
-            while optimal and l<self.K:
+            while optimal and l<self.MoMAB.K:
                 if np.min(mu[l]-mu[i]) >= 0 and l!=i:
                     optimal = False
                 l += 1
             if optimal:
                 Pareto_Set.append(i)
         if Pareto_Set == []:
-            for i in range(self.K):
+            for i in range(self.MoMAB.K):
                 optimal = True
                 l = 0
-                while optimal and l<self.K:
+                while optimal and l<self.MoMAB.K:
                     if np.min(mu[l]-mu[i]) > 0 and l!=i:
                         optimal = False
                     l += 1
@@ -51,7 +47,7 @@ class UCB1Pareto(object):
         i = np.random.choice(Pareto_Set)
 
         self.mean_rewards[i] *= self.arms_counter[i]
-        self.mean_rewards[i] += self.A[i].sample()
+        self.mean_rewards[i] += self.MoMAB.A[i].sample()
         self.arms_counter[i] += 1
         self.mean_rewards[i] /= self.arms_counter[i]
 
@@ -59,7 +55,7 @@ class UCB1Pareto(object):
         return i
 
     def fairness(self):
-        A_star_counter = np.array([self.arms_counter[i] for i in self.A_star])
+        A_star_counter = np.array([self.arms_counter[i] for i in self.MoMAB.A_star])
         return A_star_counter.var()
 
     def regret(self):
