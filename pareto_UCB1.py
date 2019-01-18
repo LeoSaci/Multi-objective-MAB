@@ -2,8 +2,7 @@ import numpy as np
 import numpy.random as rd
 import matplotlib.pyplot as plt
 from utils import Pareto_metric
-
-
+from utils import optimal_mixed_sol
 
 
 class UCB1Pareto():
@@ -13,11 +12,14 @@ class UCB1Pareto():
         self.mean_rewards = np.zeros((MoMAB.K,MoMAB.D))
         self.arms_counter = np.zeros(MoMAB.K)
         self.arms_regrets = np.array([Pareto_metric(mu,MoMAB.O_star) for mu in MoMAB.O])
+        self.sum_rew = np.zeros(MoMAB.D)
 
     def initialize(self):
         self.arms_counter = np.ones(self.MoMAB.K)
+        self.sum_rew = np.zeros(self.MoMAB.D)
         for i in range(self.MoMAB.K):
             self.mean_rewards[i] = self.MoMAB.A[i].sample()
+            self.sum_rew += self.mean_rewards[i]
         self.t = self.MoMAB.K
 
     def update(self):
@@ -47,10 +49,12 @@ class UCB1Pareto():
         i = np.random.choice(Pareto_Set)
 
         self.mean_rewards[i] *= self.arms_counter[i]
-        self.mean_rewards[i] += self.MoMAB.A[i].sample()
+        sample = self.MoMAB.A[i].sample()
+        self.mean_rewards[i] += sample
         self.arms_counter[i] += 1
         self.mean_rewards[i] /= self.arms_counter[i]
 
+        self.sum_rew += sample
         self.t += 1
         return i
 
@@ -60,3 +64,7 @@ class UCB1Pareto():
 
     def regret(self):
         return np.sum(self.arms_counter*self.arms_regrets)
+
+    def regret_ogde(self,ogde):
+        mean_reward = self.sum_rew/self.t
+        return ogde.G_w(optimal_mixed_sol(self.MoMAB.O))-ogde.G_w(mean_reward)

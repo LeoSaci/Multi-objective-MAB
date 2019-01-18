@@ -50,3 +50,6 @@ class OGDE(object):
             return self.G_w(optimal_mixed_sol(self.MoMAB.O))-self.G_w(mean_reward)
         else:
             return 0
+
+    def regret_pareto(self):
+        return np.vdot(self.arms_counter,self.arms_regrets)#np.sum(self.arms_counter*self.arms_regrets)

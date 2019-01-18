@@ -2,76 +2,83 @@ import numpy as np
 from tqdm import tqdm
 from scipy import stats
 import matplotlib.pyplot as plt
-from utils import create_arms,plot_histograms,plot_Pareto_frontier2d,plot_Pareto_frontier3d
+from utils import create_arms,plot_histograms,plot_Pareto_frontier2d,plot_Pareto_frontier3d,alpha_star
 from pareto_UCB1 import UCB1Pareto
 from linear_scalarization import scal_UCB1
 from random_policy import random_policy
 from OGDE import OGDE
 from mo_MAB import MoMAB
-
-D = 3
-K = 15
-ArmClass = ['multinomial','exponential'][0]
-
-# Generate a D-objective MO-MAB, K arms of ArmClass distribution
-A,A_star = create_arms(ArmClass,K,D)
-MO_MAB = MoMAB(A,A_star)
+import mo_arms
 
 q = stats.norm.ppf(0.975)
 
+D = 2
+K = 6
+ArmClass = ['multinomial','exponential'][0]
 
-T = 10000
-hist_times = [500,5000,T]
-n_itr = 5
-
-delta0 = 10**-10
-delta1 = 10**-5
-delta2 = 0.01
-delta3 = 0.1
-delta4 = 0.5
-
-w0 = np.array([0.6,0.4])
-w1 = np.array([0.75,0.25])
-w2 = np.array([0.9,0.1])
-w3 = np.array([1,0])
-w4 = np.array([2,1])
-
-weights_sets = [np.array([0.5,0.5])]
-weights_sets2 = [np.array([i/10,1-i/10]) for i in range(10)]
+# Generate a random D-objective MO-MAB, K arms of ArmClass distribution
+                      #(with mean vectors of the form r*[x_1,...,x_D], with sum(x_i) = 1 and r in [0.2,0.7] )
+A,A_star = create_arms(ArmClass,K,D)
+MO_MAB = MoMAB(A,A_star)
 
 
+# General parameters
+T = 5000                   # horizon time
+hist_times = [50,500,T]    # Times at which we plot histograms of selected arms
+n_itr = 1                  # number of runs for each method
+
+
+# Parameters for OGDE algorithm
+delta = 0.01
+w = np.array([2**(1-i) for i in range(D)])
+
+# Set of weights for Linear Scalarization algorithm
+weights_sets = [np.array([(i+1)/10,1-(i+1)/10]) for i in range(9)]
+
+# Algorithms
+scal = scal_UCB1(MO_MAB, weights_sets)
 pareto = UCB1Pareto(MO_MAB)
-# scal = scal_UCB1(MO_MAB, weights_sets)
-# scal2 = scal_UCB1(MO_MAB, weights_sets2)
+ogde = OGDE(MO_MAB, w, delta)
 rand = random_policy(MO_MAB)
-ogde = OGDE(MO_MAB, np.array([2,1,0.5]), delta2)
 
-# ogde0 = OGDE(MO_MAB, w4, delta0)
-# ogde1 = OGDE(MO_MAB, w4, delta1)
-# ogde2 = OGDE(MO_MAB, w4, delta2)
-# ogde3 = OGDE(MO_MAB, w4, delta3)
-# ogde4 = OGDE(MO_MAB, w4, delta4)
-
-# algo_names = ['Pareto UCB1','delta0','delta1','delta2']
-# algo_list = [pareto,ogde,OGDE(MO_MAB, w0, delta1),OGDE(MO_MAB, w0, delta2)]
-
-# algo_names = ['ogde0','ogde1','ogde2','ogde3','ogde4']
-# algo_list = [ogde0,ogde1,ogde2,ogde3,ogde4]
-algo_names = ['Pareto UCB1','Random policy','OGDE'] #'Linear scalarization '+r'$(W_1)$','Linear scalarization '+r'$(W_2)$'
-algo_list = [pareto,rand,ogde]
-
+# Choices of the algorithms to run and of the curves to plot
+algo_names = ['OGDE','Pareto UCB1','Random policy','Linear scalarization']
+algo_list = [ogde,pareto,rand,scal]
 [plot_arms,plot_curves,plot_histo] = [True,True,True]
+
+REGRET = []
+VAR_REGRET = []
+
+FAIRNESS = []
+VAR_FAIRNESS = []
+
+RATE_OPT = []
+VAR_RATE_OPT = []
+
+two_regrets = False
+if two_regrets:
+    REGRET_OGDE = []
+    VAR_REGRET_OGDE = []
+
+    REGRET_PARETO = []
+    VAR_REGRET_PARETO = []
+
+
 print(str(D)+'-objective MO-MAB ; '+str(K)+' arms with '+ArmClass+' distributions')
 print('Pareto front : '+str(len(A_star))+' optimal arms')
 print('   ')
 for ind in range(len(algo_list)):
     algo = algo_names[ind]
     algorithm = algo_list[ind]
-    plot_fairness = algo_names[ind] in ['Pareto UCB1','Linear scalarization '+r'$(W_1)$','Linear scalarization '+r'$(W_2)$']
+    plot_fairness = algo_names[ind] in ['Pareto UCB1','Linear scalarization '+r'$(W_1)$','Linear scalarization '+r'$(W_2)$','Linear scalarization '+r'$(W_3)$']
     print('Algorithm : '+algo)
     if plot_fairness:
         fairness = np.zeros((n_itr,T))
-    regret = np.zeros((n_itr,T))
+    if two_regrets:
+        regret_pareto = np.zeros((n_itr,T))
+        regret_ogde = np.zeros((n_itr,T))
+    else:
+        regret = np.zeros((n_itr,T))
 
     histograms = [[],[],[]]
     opt_arms_rate = np.zeros((n_itr,T))
@@ -84,7 +91,16 @@ for ind in range(len(algo_list)):
             i = algorithm.update() # indice of the arm selected at time t=n+K
             if plot_fairness:
                 fairness[it,n+K] = algorithm.fairness()
-            regret[it,K+n] = algorithm.regret()
+            if two_regrets:
+                if algo == 'OGDE':
+                    regret_ogde[it,K+n] = algorithm.regret()
+                    regret_pareto[it,K+n] = algorithm.regret_pareto()
+                elif algo == 'Pareto UCB1':
+                    regret_ogde[it,K+n] = algorithm.regret_ogde(ogde)
+                    regret_pareto[it,K+n] = algorithm.regret()
+
+            else:
+                regret[it,K+n] = algorithm.regret()
             if n < hist_times[0]-K:
                 histograms[0].append(i+1)
                 histograms[1].append(i+1)
@@ -105,14 +121,31 @@ for ind in range(len(algo_list)):
     if plot_fairness:
         avg_fairness = sum(fairness)/n_itr
         var_fairness = sum((fairness-avg_fairness)**2)/n_itr
+        FAIRNESS.append(avg_fairness)
+        VAR_FAIRNESS.append(var_fairness)
 
+    if not two_regrets:
+        avg_regret = sum(regret)/n_itr
+        var_regret = sum((regret-avg_regret)**2)/n_itr
+        REGRET.append(avg_regret)
+        VAR_REGRET.append(var_regret)
+    else:
+        avg_regret_pareto = sum(regret_pareto)/n_itr
+        var_regret_pareto = sum((regret_pareto-avg_regret_pareto)**2)/n_itr
+        REGRET_PARETO.append(avg_regret_pareto)
+        VAR_REGRET_PARETO.append(var_regret_pareto)
 
-    avg_regret = sum(regret)/n_itr
-    var_regret = sum((regret-avg_regret)**2)/n_itr
+        avg_regret_ogde = sum(regret_ogde)/n_itr
+        var_regret_ogde = sum((regret_ogde-avg_regret_ogde)**2)/n_itr
+        REGRET_OGDE.append(avg_regret_ogde)
+        VAR_REGRET_OGDE.append(var_regret_ogde)
 
     opt_arms_rate_mean = sum(opt_arms_rate)/n_itr
     opt_arms_rate_var = sum((opt_arms_rate - opt_arms_rate_mean)**2)/n_itr
 
+
+    RATE_OPT.append(opt_arms_rate_mean)
+    VAR_RATE_OPT.append(opt_arms_rate_var)
 
     time = np.arange(T)
 
@@ -126,13 +159,30 @@ for ind in range(len(algo_list)):
             plt.title('Unfairness averaged over '+str(n_itr)+' runs')
             plt.legend()
 
-        plt.figure(2)
-        plt.plot(time,avg_regret,label=algo)
-        plt.fill_between(time,avg_regret-(q/np.sqrt(n_itr))*np.sqrt(var_regret), avg_regret+(q/np.sqrt(n_itr))*np.sqrt(var_regret),color='#D3D3D3')
-        plt.xlabel('Number of rounds')
-        plt.ylabel('Regret')
-        plt.title('Regret averaged over '+str(n_itr)+' runs')
-        plt.legend()
+        if two_regrets:
+            plt.figure(21)
+            plt.plot(time,avg_regret_pareto,label=algo)
+            plt.fill_between(time,avg_regret_pareto-(q/np.sqrt(n_itr))*np.sqrt(var_regret_pareto), avg_regret_pareto+(q/np.sqrt(n_itr))*np.sqrt(var_regret_pareto),color='#D3D3D3')
+            plt.xlabel('Number of rounds')
+            plt.ylabel('Regret')
+            plt.title('Regret for Pareto definition averaged over '+str(n_itr)+' runs')
+            plt.legend()
+
+            plt.figure(22)
+            plt.plot(time,avg_regret_ogde,label=algo)
+            plt.fill_between(time,avg_regret_ogde-(q/np.sqrt(n_itr))*np.sqrt(var_regret_ogde), avg_regret_ogde+(q/np.sqrt(n_itr))*np.sqrt(var_regret_ogde),color='#D3D3D3')
+            plt.xlabel('Number of rounds')
+            plt.ylabel('Regret')
+            plt.title('Regret for OGDE definition averaged over '+str(n_itr)+' runs')
+            plt.legend()
+        else:
+            plt.figure(2)
+            plt.plot(time,avg_regret,label=algo)
+            plt.fill_between(time,avg_regret-(q/np.sqrt(n_itr))*np.sqrt(var_regret), avg_regret+(q/np.sqrt(n_itr))*np.sqrt(var_regret),color='#D3D3D3')
+            plt.xlabel('Number of rounds')
+            plt.ylabel('Regret')
+            plt.title('Regret averaged over '+str(n_itr)+' runs')
+            plt.legend()
 
         plt.figure(3)
         plt.plot(np.arange(T),opt_arms_rate_mean,label = algo)
@@ -146,15 +196,13 @@ for ind in range(len(algo_list)):
         fig = plot_histograms(algo,histograms,hist_times,K,A_star)
 
 if plot_arms:
-    alpha = algo_list[-1].alpha.reshape((1,K))
+    alpha = ogde.alpha.reshape((1,K))
     mat = np.array([MO_MAB.O[k] for k in range(K)])
     opt_mix = alpha.dot(mat)[0]
     print('Optimal mixed solution for OGDE : '+str(opt_mix))
 
     if D == 2:
-        plot_Pareto_frontier2d(MO_MAB,opt_mix,ogde_list = [ogde0,ogde1,ogde2,ogde3,ogde4])
+        plot_Pareto_frontier2d(MO_MAB)
     elif D == 3:
         plot_Pareto_frontier3d(MO_MAB,opt_mix)
-
-
 plt.show()

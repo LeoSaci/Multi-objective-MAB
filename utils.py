@@ -5,24 +5,21 @@ import pylab
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import proj3d
 import mo_arms
-
-
+from scipy.optimize import linprog
 
 
 # Generate a bi-objective MO-MAB, K arms with multinomial distributions
 def create_arms(ArmClass,K,D):
     angles1 = [rd.rand()*np.pi/2 for i in range(K)]
     angles2 = [rd.rand()*np.pi/2 for i in range(K)]
-    if D == 2:
-        if ArmClass == 'multinomial':
-            A = [mo_arms.ArmMultinomial(mean = rd.rand()*np.array([np.cos(angles1[i]),np.sin(angles1[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
-        else:
-            A = [mo_arms.ArmExp(L = rd.rand()*np.array([np.cos(angles1[i]),np.sin(angles1[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
-    elif D == 3:
-        if ArmClass == 'multinomial':
-            A = [mo_arms.ArmMultinomial(mean = rd.rand()*np.array([np.cos(angles1[i])*np.sin(angles2[i]),np.sin(angles1[i])*np.sin(angles2[i]),np.cos(angles2[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
-        else:
-            A = [mo_arms.ArmExp(L = rd.rand()*np.array([np.cos(angles1[i])*np.sin(angles2[i]),np.sin(angles1[i])*np.sin(angles2[i]),np.cos(angles2[i])]), random_state=np.random.randint(1, 312414)) for i in range(K)]
+    A = []
+    for i in range(K):
+        samp = np.random.rand(D)
+        samp = samp/np.linalg.norm(samp)
+        mod = 0.2+0.5*np.random.rand()
+        samp = mod*samp
+        A.append(mo_arms.ArmMultinomial(mean = samp, random_state=np.random.randint(1, 312414)))
+
     A_star = []
     for k in range(K):
         mu = A[k].mean
@@ -79,16 +76,15 @@ def plot_Pareto_frontier2d(MO_MAB,ogde_list = []):
         if i == len(O_star)-1:
             plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k', label = 'Optimal arms reward vectors')
     opt_mixed_sol = optimal_mixed_sol(O)
-    plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = 'Optimal mixed solution for $G_w$')
+    plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = '$\sum_{k=1}^K \\alpha_k^* \mu_k$')
     if ogde_list != []:
         for i,algo in enumerate(ogde_list):
             w = algo.w
             alpha = algo.alpha.reshape((len(algo.alpha),1))
             mu = O.T
             point = mu.dot(alpha).T[0]
-            print(point)
-            plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\mu\\alpha_T$ '+'for w = '+'('+str(w[0,0])+','+str(w[0,1])+') and $\delta$ = '+str(algo.delta))
-            plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
+            plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\sum_{k=1}^K \\alpha_k^{(T)} \mu_k$')
+            #plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
     plt.legend()
 
 def plot_Pareto_frontier3d(MO_MAB,opt_mix):
@@ -115,46 +111,6 @@ def plot_Pareto_frontier3d(MO_MAB,opt_mix):
         else:
             col = 'k'
         ax.text(O[i][0],O[i][1],O[i][2], ' Arm'+ '%s' % (str(i+1)), size=10, zorder=1,  color=col)
-
-    # theta = np.linspace(0,np.pi/2,50)
-    # phi = np.linspace(0,np.pi/2,50)
-    # tab = np.array([     [ 0.1*np.cos(theta[i])*np.sin(phi[i]),0.1*np.sin(theta[i])*np.sin(phi[i]),0.1*np.cos(phi[i]) ] for i in range(50)     ])
-    # tab1 = np.zeros((len(tab),3))
-    # tab2 = np.zeros((len(tab),3))
-    # for i in range(len(tab)):
-    #     tab1[i] = tab[i] + np.max([np.min(mu-tab[i]) for mu in O_star])
-    #     tab2[i] = tab[i] + np.min([np.max(mu-tab[i]) for mu in O_star])
-    # x = tab1.T[0]
-    # y = tab1.T[1]
-    # X,Y = np.meshgrid(x, y)
-    # Z = np.array([ []     ])
-    #
-    #
-    # ax.imshow(Z,cmap=cm.RdBu)
-
-
-    # opt_mixed_sol = optimal_mixed_sol(O)
-    # plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = 'Optimal mixed solution for $G_w$')
-
-
-
-    # plt.figure(0)
-    # plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'k', label = 'Suboptimal arms reward vectors')
-    # for i in range(len(O)):
-    #     plt.annotate('Arm '+str(i+1),(O[i][0],O[i][1]),(O[i][0]+0.01,O[i][1]+0.01))
-    #     if i < len(O_star):
-    #         plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='r')
-
-
-    # if ogde_list != []:
-    #     for i,algo in enumerate(ogde_list):
-    #         w = algo.w
-    #         alpha = algo.alpha.reshape((len(algo.alpha),1))
-    #         mu = O.T
-    #         point = mu.dot(alpha).T[0]
-    #         print(point)
-    #         plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\mu\\alpha_T$ '+'for w = '+'('+str(w[0,0])+','+str(w[0,1])+') and $\delta$ = '+str(algo.delta))
-    #         plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
     plt.legend()
 
 
@@ -261,3 +217,45 @@ def plot_histograms(algo,histograms,hist_times,K,A_star):
 
     fig.suptitle(algo)
     return fig
+
+def alpha_star(MO_MAB,w):
+    O = MO_MAB.O
+    D = MO_MAB.D
+    K = MO_MAB.K
+
+    w_temp = list(w)[1:]
+    w_temp.append(0)
+    w_temp = np.array(w_temp)
+    w_prime = w-w_temp
+
+    c = np.zeros(K+D+D**2)
+    c[K:K+D] = (np.arange(D)+1)*w_prime
+    for i in range(D):
+        c[K+(i+1)*D:K+(i+2)*D]
+
+    A_eq = np.zeros(K+D+D**2)
+    A_eq[:K] = np.ones(K)
+    A_eq = A_eq.reshape((1,len(A_eq)))
+    b_eq = np.array([1])
+    b_u = np.zeros(K+D**2+D**2)
+
+    A_u = np.zeros((K+D+D**2,K+2*D**2)).T
+    A_u[:K,:K] = -np.eye(K)
+    A_u[K:K+D**2,K+D:] = -np.eye(D**2)
+
+    A_u[K+D**2:,K+D:] = -np.eye(D**2)
+
+    B_2 = np.zeros((D**2,K))
+    for j in range(D):
+        for i in range(D):
+            B_2[j*D+i] = np.array([O[k][j] for k in range(K)])
+    A_u[K+D**2:,:K] = B_2
+
+    B_3 = np.zeros((D**2,D))
+    for j in range(D):
+        B_3[j*D:(j+1)*D] = -np.eye(D)
+
+    A_u[K+D**2:,K:K+D] = B_3
+    res = linprog(c=c,A_ub=A_u,b_ub=b_u,A_eq=A_eq,b_eq=b_eq)
+
+    return res['x'][:K]
