@@ -12,9 +12,9 @@ import mo_arms
 
 q = stats.norm.ppf(0.975)
 
-D = 2
-K = 6
-ArmClass = ['multinomial','exponential'][0]
+D = 2   # Number of objectives
+K = 6   # Number of Arms
+ArmClass = ['multinomial','exponential'][0]  # Arms distribution
 
 # Generate a random D-objective MO-MAB, K arms of ArmClass distribution
                       #(with mean vectors of the form r*[x_1,...,x_D], with sum(x_i) = 1 and r in [0.2,0.7] )
