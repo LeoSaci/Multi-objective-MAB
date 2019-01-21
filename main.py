@@ -2,18 +2,19 @@ import numpy as np
 from tqdm import tqdm
 from scipy import stats
 import matplotlib.pyplot as plt
-from utils import create_arms,plot_histograms,plot_Pareto_frontier2d,plot_Pareto_frontier3d,alpha_star
+from utils import create_arms,plot_histograms,plot_momab,G,plot_G
 from pareto_UCB1 import UCB1Pareto
 from linear_scalarization import scal_UCB1
 from random_policy import random_policy
 from OGDE import OGDE
 from mo_MAB import MoMAB
 import mo_arms
+from scipy.optimize import linprog
 
 q = stats.norm.ppf(0.975)
 
-D = 2   # Number of objectives
-K = 6   # Number of Arms
+D = 3   # Number of objectives
+K = 15  # Number of Arms
 ArmClass = ['multinomial','exponential'][0]  # Arms distribution
 
 # Generate a random D-objective MO-MAB, K arms of ArmClass distribution
@@ -23,7 +24,7 @@ MO_MAB = MoMAB(A,A_star)
 
 
 # General parameters
-T = 5000                   # horizon time
+T = 50000              # horizon time
 hist_times = [50,500,T]    # Times at which we plot histograms of selected arms
 n_itr = 1                  # number of runs for each method
 
@@ -31,19 +32,20 @@ n_itr = 1                  # number of runs for each method
 # Parameters for OGDE algorithm
 delta = 0.01
 w = np.array([2**(1-i) for i in range(D)])
+w = np.sort(w)
 
 # Set of weights for Linear Scalarization algorithm
 weights_sets = [np.array([(i+1)/10,1-(i+1)/10]) for i in range(9)]
 
 # Algorithms
-scal = scal_UCB1(MO_MAB, weights_sets)
+#scal = scal_UCB1(MO_MAB, weights_sets)
 pareto = UCB1Pareto(MO_MAB)
 ogde = OGDE(MO_MAB, w, delta)
 rand = random_policy(MO_MAB)
 
 # Choices of the algorithms to run and of the curves to plot
-algo_names = ['OGDE','Pareto UCB1','Random policy','Linear scalarization']
-algo_list = [ogde,pareto,rand,scal]
+algo_names = ['OGDE','Pareto UCB1','Random policy']#,'Linear scalarization']
+algo_list = [ogde,pareto,rand]#,scal]
 [plot_arms,plot_curves,plot_histo] = [True,True,True]
 
 REGRET = []
@@ -67,7 +69,7 @@ if two_regrets:
 print(str(D)+'-objective MO-MAB ; '+str(K)+' arms with '+ArmClass+' distributions')
 print('Pareto front : '+str(len(A_star))+' optimal arms')
 print('   ')
-for ind in range(len(algo_list)):
+for ind in range(len(algo_list[:1])):
     algo = algo_names[ind]
     algorithm = algo_list[ind]
     plot_fairness = algo_names[ind] in ['Pareto UCB1','Linear scalarization '+r'$(W_1)$','Linear scalarization '+r'$(W_2)$','Linear scalarization '+r'$(W_3)$']
@@ -80,6 +82,9 @@ for ind in range(len(algo_list)):
     else:
         regret = np.zeros((n_itr,T))
 
+    if algo == 'OGDE':
+        alpha_ogde = []
+        alpha_ogde_times = np.array([int(np.exp(x)) for x in np.linspace(0,np.log(T),100)])
     histograms = [[],[],[]]
     opt_arms_rate = np.zeros((n_itr,T))
     for it in tqdm(range(n_itr)):
@@ -89,6 +94,9 @@ for ind in range(len(algo_list)):
         algorithm.initialize()
         for n in range(T-K):
             i = algorithm.update() # indice of the arm selected at time t=n+K
+            if algo == 'OGDE':
+                if algorithm.t in alpha_ogde_times:
+                    alpha_ogde.append(algorithm.alpha)
             if plot_fairness:
                 fairness[it,n+K] = algorithm.fairness()
             if two_regrets:
@@ -195,14 +203,70 @@ for ind in range(len(algo_list)):
     if plot_histo:
         fig = plot_histograms(algo,histograms,hist_times,K,A_star)
 
-if plot_arms:
-    alpha = ogde.alpha.reshape((1,K))
-    mat = np.array([MO_MAB.O[k] for k in range(K)])
-    opt_mix = alpha.dot(mat)[0]
-    print('Optimal mixed solution for OGDE : '+str(opt_mix))
 
-    if D == 2:
-        plot_Pareto_frontier2d(MO_MAB)
-    elif D == 3:
-        plot_Pareto_frontier3d(MO_MAB,opt_mix)
+alpha_star,opt_mix_rew = MO_MAB.alpha_star, MO_MAB.optimal_mixed_rew
+print('Optimal mixed reward = '+str(opt_mix_rew))
+
+alpha = ogde.alpha.reshape((1,K))
+opt_mix = alpha.dot(MO_MAB.O)[0]
+print('Mixed reward at time T = '+str(opt_mix))
+print('')
+print('Alpha_star = '+str(alpha_star))
+print('Alpha_T = '+str(alpha[0]))
+
+if plot_arms and D in [2,3]:
+    plot_momab(MO_MAB, opt_mix, alpha_ogde = alpha_ogde, annotate = True, plot_frontier = False)
+
 plt.show()
+#if D==2:
+
+# def z_func(x,y):
+#     return G(w,np.array([x,y]))
+#
+# x = np.arange(0,0,0.1)
+# y = np.arange(0,1,0.1)
+# X,Y = np.meshgrid(x, y)
+# Z = np.array([[z_func(X[i,j],Y[i,j]) for j in range(X.shape[1])] for i in range(X.shape[0])])
+#
+# im = plt.imshow(Z) # drawing the function
+# # adding the Contour lines with labels
+# cset = plt.contour(Z)
+# plt.clabel(cset,inline=True,fmt='%1.1f',fontsize=10)
+# plt.colorbar(im) # adding the colobar on the right
+# # latex fashion title
+# plt.title('$G_w$')
+
+
+# from pylab import cm
+#
+# plt.figure(10)
+# x = np.arange(0,1,0.01)
+# y = np.arange(0,1,0.01)
+# X,Y = np.meshgrid(x, y)
+#
+# Z = np.array([[G(np.flipud(w),[X[i,j],Y[i,j]]) for j in range(X.shape[1])] for i in range(X.shape[0])])
+#
+# im = plt.imshow(Z,cmap=cm.RdBu)
+# cset = plt.contour(Z,np.arange(-1,1.5,0.2),linewidths=2,cmap=cm.Set2)
+# plt.clabel(cset,inline=True,fmt='%1.1f',fontsize=10)
+# plt.colorbar(im)
+# plt.title('$G_w$')
+#
+# from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib import cm
+# from matplotlib.ticker import LinearLocator, FormatStrFormatter
+# import matplotlib.pyplot as plt
+#
+# fig = plt.figure()
+# ax = fig.gca(projection='3d')
+# surf = ax.plot_surface(X, Y, Z, rstride=1, cstride=1,
+#                       cmap=cm.RdBu,linewidth=0, antialiased=False)
+#
+# ax.zaxis.set_major_locator(LinearLocator(10))
+# ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+#
+# fig.colorbar(surf, shrink=0.5, aspect=5)
+
+
+
+#plt.show()

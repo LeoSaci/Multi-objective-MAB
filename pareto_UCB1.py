@@ -1,8 +1,7 @@
 import numpy as np
 import numpy.random as rd
 import matplotlib.pyplot as plt
-from utils import Pareto_metric
-from utils import optimal_mixed_sol
+from utils import Pareto_metric,G
 
 
 class UCB1Pareto():
@@ -25,7 +24,6 @@ class UCB1Pareto():
     def update(self):
         Pareto_Set = []
         mu = [self.mean_rewards[k]+np.sqrt((2/self.arms_counter[k])*np.log( self.t*(self.MoMAB.D*self.MoMAB.K)**0.25)) for k in range(self.MoMAB.K)]
-
         for i in range(self.MoMAB.K):
             optimal = True
             l = 0
@@ -45,15 +43,12 @@ class UCB1Pareto():
                     l += 1
                 if optimal:
                     Pareto_Set.append(i)
-
         i = np.random.choice(Pareto_Set)
-
         self.mean_rewards[i] *= self.arms_counter[i]
         sample = self.MoMAB.A[i].sample()
         self.mean_rewards[i] += sample
         self.arms_counter[i] += 1
         self.mean_rewards[i] /= self.arms_counter[i]
-
         self.sum_rew += sample
         self.t += 1
         return i
@@ -67,4 +62,4 @@ class UCB1Pareto():
 
     def regret_ogde(self,ogde):
         mean_reward = self.sum_rew/self.t
-        return ogde.G_w(optimal_mixed_sol(self.MoMAB.O))-ogde.G_w(mean_reward)
+        return self.MoMAB.max_obj_fun - G(MO_MAB.w,mean_reward)

@@ -6,12 +6,11 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import proj3d
 import mo_arms
 from scipy.optimize import linprog
+from pylab import cm
 
 
 # Generate a bi-objective MO-MAB, K arms with multinomial distributions
 def create_arms(ArmClass,K,D):
-    angles1 = [rd.rand()*np.pi/2 for i in range(K)]
-    angles2 = [rd.rand()*np.pi/2 for i in range(K)]
     A = []
     for i in range(K):
         samp = np.random.rand(D)
@@ -43,75 +42,86 @@ def create_arms(ArmClass,K,D):
 def Pareto_metric(mu,ParetoSet):
     return np.max([np.min(nu-mu) for nu in ParetoSet])
 
-def optimal_mixed_sol(arm_means):
-    top_arms = []
-    bottom_arms = []
-    for i in range(len(arm_means)):
-        if arm_means[i][0]-arm_means[i][1]<0:
-            top_arms.append(i)
-        else:
-            bottom_arms.append(i)
-    if top_arms == [] or bottom_arms == []:
-        print('error')
-    else:
-        l = []
-        for i in range(len(top_arms)):
-            for j in range(len(bottom_arms)):
-                P = arm_means[top_arms[i]]
-                Q = arm_means[bottom_arms[j]]
-                l.append((P[0]*((Q[1]-P[1])/(Q[0]-P[0]))-P[1])/((Q[1]-P[1])/(Q[0]-P[0])-1))
-    max_value = np.max(l)
-    return np.array([max_value,max_value])
 
-
-def plot_Pareto_frontier2d(MO_MAB,ogde_list = []):
+def plot_momab(MO_MAB, opt_mix, alpha_ogde =[], annotate = True, plot_frontier = False):
+    D = MO_MAB.D
     O = MO_MAB.O
     O_star = MO_MAB.O_star
-    fig = plt.figure(0)
-    plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'r', label = 'Suboptimal arms reward vectors')
-    for i in range(len(O)):
-        plt.annotate('Arm '+str(i+1),(O[i][0],O[i][1]),(O[i][0]+0.01,O[i][1]+0.01))
-        if i < len(O_star)-1:
-            plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k')
-        if i == len(O_star)-1:
-            plt.scatter([O[i][0]],[O[i][1]],marker = 'o',color='k', label = 'Optimal arms reward vectors')
-    opt_mixed_sol = optimal_mixed_sol(O)
-    plt.scatter([opt_mixed_sol[0]],[opt_mixed_sol[1]],marker = 'o',color='b', label = '$\sum_{k=1}^K \\alpha_k^* \mu_k$')
-    if ogde_list != []:
-        for i,algo in enumerate(ogde_list):
-            w = algo.w
-            alpha = algo.alpha.reshape((len(algo.alpha),1))
-            mu = O.T
-            point = mu.dot(alpha).T[0]
-            plt.scatter([point[0]],[point[1]],marker = 'o',color='g', label = '$\sum_{k=1}^K \\alpha_k^{(T)} \mu_k$')
-            #plt.annotate('ogde '+str(i),(point[0],point[1]),(point[0],point[1]))
-    plt.legend()
+    if D ==2:
+        fig = plt.figure(0)
+        plt.scatter([O[i][0] for i in range(len(O))], [O[i][1] for i in range(len(O))] ,marker = 'o',color = 'k', label = 'Suboptimal arms reward vectors')
+        plt.scatter([O[i][0] for i in range(len(O_star))], [O[i][1] for i in range(len(O_star))] ,marker = 'o',color = 'r', label = 'Optimal arms reward vectors')
+        for i in range(len(O)):
+            if annotate:
+                for i in range(len(O)):
+                    if i < len(O_star):
+                        col = 'r'
+                    else:
+                        col = 'k'
+                    plt.text(O[i][0]+0.01,O[i][1]+0.01, ' Arm'+ '%s' % (str(i+1)), size=10, zorder=1,  color=col)
+        mu_star = MO_MAB.optimal_mixed_rew
+        plt.scatter(mu_star[0],mu_star[1], marker = 'o', color = 'b', label = '$\sum_{k=1}^K \\alpha_k^* \mu_k$')
+        plt.scatter([opt_mix[0]],[opt_mix[1]],marker = 'o',color='g', label = '$\sum_{k=1}^K \\alpha_k^{(T)} \mu_k$')
+        plt.plot([0,np.max(O)],[0,np.max(O)],'--', color = 'k',label = 'x = y =z')
+        if alpha_ogde != []:
+            mixed_rews = np.array([sum((alpha*O.T).T) for alpha in alpha_ogde])
+            plt.plot(mixed_rews[:,0],mixed_rews[:,1],'--',color='y',label = '$t \mapsto \sum_{k=1}^K \\alpha_k^{(t)} \mu_k$')
+        plt.legend()
 
-def plot_Pareto_frontier3d(MO_MAB,opt_mix):
-    O = MO_MAB.O
-    O_star = MO_MAB.O_star
+    elif D == 3:
+        fig = pylab.figure(0)
+        ax = fig.add_subplot(111, projection = '3d')
+        x = O[:,0]
+        y = O[:,1]
+        z = O[:,2]
+        sc1 = ax.scatter(x,y,z,color = 'k',label = 'Suboptimal arms reward vectors')
 
-    fig = pylab.figure(0)
-    ax = fig.add_subplot(111, projection = '3d')
-    x = O[:,0]
-    y = O[:,1]
-    z = O[:,2]
-    sc1 = ax.scatter(x,y,z,color = 'k',label = 'Suboptimal arms reward vectors')
+        x = O_star[:,0]
+        y = O_star[:,1]
+        z = O_star[:,2]
+        sc2 = ax.scatter(x,y,z,color = 'r',label = 'Optimal arms reward vectors')
 
-    x = O_star[:,0]
-    y = O_star[:,1]
-    z = O_star[:,2]
-    sc2 = ax.scatter(x,y,z,color = 'r',label = 'Optimal arms reward vectors')
+        mu_star = MO_MAB.optimal_mixed_rew
+        ax.scatter(mu_star[0],mu_star[1],mu_star[2], marker = 'o', color = 'b', label = '$\sum_{k=1}^K \\alpha_k^* \mu_k$')
+        ax.scatter(opt_mix[0],opt_mix[1],opt_mix[2], marker = 'o', color = 'g', label = '$\sum_{k=1}^K \\alpha_k^{(T)} \mu_k$')
+        ax.plot([0,np.max(O)],[0,np.max(O)],[0,np.max(O)],'--', color = 'k', label = 'x = y =z')
+        if alpha_ogde != []:
+            mixed_rews = np.array([sum((alpha*O.T).T) for alpha in alpha_ogde])
+            ax.plot(mixed_rews[:,0],mixed_rews[:,1],mixed_rews[:,2],'--',color='y',label = '$t \mapsto \sum_{k=1}^K \\alpha_k^{(t)} \mu_k$')
+        if annotate:
+            for i in range(len(O)):
+                if i < len(O_star):
+                    col = 'r'
+                else:
+                    col = 'k'
+                ax.text(O[i][0],O[i][1],O[i][2], ' Arm'+ '%s' % (str(i+1)), size=10, zorder=1,  color=col)
 
-    ax.scatter(opt_mix[0],opt_mix[1],opt_mix[2], marker = 'o', color = 'g', label = 'Computed optimal mixed solution')
+        if plot_frontier:
+            theta = [np.arctan(np.linalg.norm([O[i][0],O[i][1]])/O[i][2]) for i in range(len(O))]
+            theta_min = np.min(theta)
+            theta_max = np.max(theta)
 
-    for i in range(len(O)):
-        if i < len(O_star):
-            col = 'r'
-        else:
-            col = 'k'
-        ax.text(O[i][0],O[i][1],O[i][2], ' Arm'+ '%s' % (str(i+1)), size=10, zorder=1,  color=col)
-    plt.legend()
+            phi = [np.arctan(O[i][1]/O[i][0]) for i in range(len(O))]
+            phi_max = np.max(phi)
+            phi_min = np.min(phi)
+
+            n1,n2 = 40,40
+            phi = np.linspace(phi_min,phi_max,n1)
+            theta = np.linspace(theta_min,theta_max,n2)
+            tab = np.zeros((n1*n2,3))
+            for i in range(n1):
+                for j in range(n2):
+                    tab[i*n2+j] = 0.6*np.array([np.cos(phi[i])*np.sin(theta[j]),np.sin(phi[i])*np.sin(theta[j]),np.cos(theta[j])])
+                    alpha = np.max([ np.min(mu)/np.max(tab[i*n2+j]) for mu in O_star])
+                    tab[i*n2+j] =tab[i*n2+j] + Pareto_metric(tab[i*n2+j],O)*np.ones(3)
+            ax.scatter(tab[:,0],tab[:,1],tab[:,2],marker='o',color = '#D3D3D3')
+        ax.set_xlabel('$x$')
+        ax.set_ylabel('$y$')
+        ax.set_zlabel('$z$')
+        # ax.set_xlim([0,1])
+        # ax.set_ylim([0,1])
+        # ax.set_zlim([0,1])
+        plt.legend()
 
 
 
@@ -218,37 +228,34 @@ def plot_histograms(algo,histograms,hist_times,K,A_star):
     fig.suptitle(algo)
     return fig
 
-def alpha_star(MO_MAB,w):
-    O = MO_MAB.O
-    D = MO_MAB.D
-    K = MO_MAB.K
-
-    w_temp = list(w)[1:]
+def alpha_star(O,w):
+    (K,D) = O.shape
+    w_temp = np.flipud(w)[1:]
+    w_temp = list(w_temp)
     w_temp.append(0)
     w_temp = np.array(w_temp)
-    w_prime = w-w_temp
+    w_prime = np.flipud(w)-w_temp
 
     c = np.zeros(K+D+D**2)
     c[K:K+D] = (np.arange(D)+1)*w_prime
     for i in range(D):
-        c[K+(i+1)*D:K+(i+2)*D]
+        c[K+(i+1)*D:K+(i+2)*D] = w_prime
 
     A_eq = np.zeros(K+D+D**2)
     A_eq[:K] = np.ones(K)
     A_eq = A_eq.reshape((1,len(A_eq)))
     b_eq = np.array([1])
-    b_u = np.zeros(K+D**2+D**2)
 
-    A_u = np.zeros((K+D+D**2,K+2*D**2)).T
+    b_u = np.zeros(K+D**2+D**2)
+    A_u = np.zeros((K+2*D**2,K+D+D**2))
     A_u[:K,:K] = -np.eye(K)
     A_u[K:K+D**2,K+D:] = -np.eye(D**2)
-
     A_u[K+D**2:,K+D:] = -np.eye(D**2)
 
     B_2 = np.zeros((D**2,K))
     for j in range(D):
         for i in range(D):
-            B_2[j*D+i] = np.array([O[k][j] for k in range(K)])
+            B_2[j*D+i] = 1-np.array([O[k][j] for k in range(K)])
     A_u[K+D**2:,:K] = B_2
 
     B_3 = np.zeros((D**2,D))
@@ -256,6 +263,30 @@ def alpha_star(MO_MAB,w):
         B_3[j*D:(j+1)*D] = -np.eye(D)
 
     A_u[K+D**2:,K:K+D] = B_3
-    res = linprog(c=c,A_ub=A_u,b_ub=b_u,A_eq=A_eq,b_eq=b_eq)
+    return linprog(c=c,A_ub=A_u,b_ub=b_u,A_eq=A_eq,b_eq=b_eq)['x'][:K]
 
-    return res['x'][:K]
+
+def G(w,mu):
+    D = len(mu)
+    mu_prime = list(mu)
+    mu_prime.sort()
+    mu_prime.reverse()
+    mu_prime = np.array(mu_prime).reshape((D,1))
+    return w.reshape((1,D)).dot(mu_prime)[0,0]
+
+def plot_G(w):
+    def z_func(x,y):
+        return G(w,np.array([x,y]))
+
+    x = np.arange(0,0,0.1)
+    y = np.arange(0,1,0.1)
+    X,Y = np.meshgrid(x, y)
+    Z = np.array([[z_func(X[i,j],Y[i,j]) for j in range(X.shape[1])] for i in range(X.shape[0])])
+
+    im = plt.imshow(Z) # drawing the function
+    # adding the Contour lines with labels
+    cset = plt.contour(Z)
+    plt.clabel(cset,inline=True,fmt='%1.1f',fontsize=10)
+    plt.colorbar(im) # adding the colobar on the right
+    # latex fashion title
+    plt.title('$G_w$')

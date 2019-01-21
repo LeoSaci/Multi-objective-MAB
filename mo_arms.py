@@ -55,8 +55,6 @@ class ArmExp(AbstractArm):
         return v
 
     def sample(self):
-        # Inverse transform sampling
-        # https://en.wikipedia.org/wiki/Inverse_transform_sampling
         q = np.random.rand(self.D)
         x = self.inv_cdf(q=q)
         return x
